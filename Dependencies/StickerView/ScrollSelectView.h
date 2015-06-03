@@ -1,34 +1,23 @@
 
 #import <UIKit/UIKit.h>
 
-@protocol GLStoryboardSelectViewDelegate;
+@protocol ScrollSelectViewDelegate;
 
-@interface GLStoryboardSelectView : UIView
+@interface ScrollSelectView : UIView
 
-@property (nonatomic, strong) UIScrollView  *storyboardView;
-@property (nonatomic, assign) id<GLStoryboardSelectViewDelegate> delegateSelect;
-@property (nonatomic, assign) NSInteger      picCount;
-@property (nonatomic, assign) NSInteger      selectStyleIndex;
+@property (nonatomic, strong) UIScrollView  *ContentView;
+@property (nonatomic, assign) id<ScrollSelectViewDelegate> delegateSelect;
+@property (nonatomic, assign) NSInteger selectStyleIndex;
 
-- (id)initWithFrameFromPuzzle:(CGRect)frame picCount:(NSInteger)picCount;
-- (id)initWithFrameFromBorder:(CGRect)frame;
-- (id)initWithFrameFromFilter:(CGRect)frame;
-- (id)initWithFrameFromSticker:(CGRect)frame;
-- (id)initWithFrameFromFace:(CGRect)frame;
-- (id)initWithFrameFromBlurBackground:(CGRect)frame;
+- (id)initWithFrameFromGif:(CGRect)frame;
 
 + (void)getDefaultFilelist;
 
 @end
 
-@protocol GLStoryboardSelectViewDelegate <NSObject>
+@protocol ScrollSelectViewDelegate <NSObject>
 
 @optional
-- (void)didSelectedStoryboardPicCount:(NSInteger)picCount styleIndex:(NSInteger)styleIndex;
-- (void)didSelectedBorderIndex:(NSInteger)styleIndex;
-- (void)didSelectedFilterIndex:(NSInteger)styleIndex;
-- (void)didSelectedStickerIndex:(NSInteger)styleIndex;
-- (void)didSelectedFaceIndex:(NSInteger)styleIndex;
-- (void)didSelectedBlueBackgroundIndex:(NSInteger)styleIndex;
+- (void)didSelectedGifIndex:(NSInteger)styleIndex;
 
 @end

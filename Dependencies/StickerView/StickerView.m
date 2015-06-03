@@ -1,9 +1,10 @@
 
 #import "StickerView.h"
+#import "GIFImageView.h"
 
 @implementation StickerView
 {
-    UIImageView *_imageView;
+    GIFImageView *_imageView;
     UIButton *_deleteButton;
     CircleView *_circleView;
     
@@ -13,6 +14,23 @@
     CGPoint _initialPoint;
     CGFloat _initialArg;
     CGFloat _initialScale;
+    
+    NSString *_filePath;
+}
+
+- (CGRect)getInnerFrame
+{
+    return [_imageView.superview convertRect:_imageView.frame toView:_imageView.superview.superview];
+}
+
+- (CGFloat)getRotateAngle
+{
+    return _arg;
+}
+
+- (NSString *)getFilePath
+{
+    return _filePath;
 }
 
 + (void)setActiveStickerView:(StickerView*)view
@@ -28,6 +46,60 @@
     }
 }
 
+- (id)initWithFilePath:(NSString *)path
+{
+    if (!isStringEmpty(path))
+    {
+        _filePath = path;
+        
+        NSData *gifData = [NSData dataWithContentsOfFile:path];
+        return [self initWithGifData:gifData];
+    }
+    
+    return nil;
+}
+
+- (id)initWithGifData:(NSData *)gifData
+{
+    int gap = 32;
+    UIImage *image = [UIImage imageWithContentsOfFile:_filePath];
+    self = [super initWithFrame:CGRectMake(0, 0, image.size.width + gap, image.size.height + gap)];
+    
+    if(self)
+    {
+        _imageView = [[GIFImageView alloc] initWithFrame:CGRectMake(0, 0, image.size.width, image.size.height)];
+        _imageView.layer.borderColor = [[UIColor blackColor] CGColor];
+        _imageView.layer.cornerRadius = 3;
+        _imageView.center = self.center;
+        _imageView.gifData = gifData;
+        [self addSubview:_imageView];
+        
+        [_imageView startGIF];
+        
+        _deleteButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        [_deleteButton setImage:[UIImage imageNamed:@"turnoff_icon"] forState:UIControlStateNormal];
+        _deleteButton.frame = CGRectMake(0, 0, 32, 32);
+        _deleteButton.center = _imageView.frame.origin;
+        [_deleteButton addTarget:self action:@selector(pushedDeleteBtn:) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:_deleteButton];
+        
+        _circleView = [[CircleView alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
+        _circleView.center = CGPointMake(_imageView.width + _imageView.frame.origin.x, _imageView.height + _imageView.frame.origin.y);
+        _circleView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
+        _circleView.radius = 0.6;
+        _circleView.color = [UIColor whiteColor];
+        _circleView.borderColor = [UIColor redColor];
+        _circleView.borderWidth = 2;
+        [self addSubview:_circleView];
+        
+        _scale = 1;
+        _arg = 0;
+        
+        [self initGestures];
+    }
+    return self;
+}
+
 - (id)initWithImage:(UIImage *)image
 {
     int gap = 32;
@@ -35,14 +107,14 @@
     
     if(self)
     {
-        _imageView = [[UIImageView alloc] initWithImage:image];
+        _imageView = [[GIFImageView alloc] initWithImage:image];
         _imageView.layer.borderColor = [[UIColor blackColor] CGColor];
         _imageView.layer.cornerRadius = 3;
         _imageView.center = self.center;
         [self addSubview:_imageView];
         
         _deleteButton = [UIButton buttonWithType:UIButtonTypeCustom];
-        [_deleteButton setImage:[UIImage imageNamed:@"makecards_picture_turnoff_icon"] forState:UIControlStateNormal];
+        [_deleteButton setImage:[UIImage imageNamed:@"turnoff_icon"] forState:UIControlStateNormal];
         _deleteButton.frame = CGRectMake(0, 0, 32, 32);
         _deleteButton.center = _imageView.frame.origin;
         [_deleteButton addTarget:self action:@selector(pushedDeleteBtn:) forControlEvents:UIControlEventTouchUpInside];
@@ -91,10 +163,15 @@
 
 - (void)pushedDeleteBtn:(id)sender
 {
+    if (_deleteFinishBlock)
+    {
+        _deleteFinishBlock(YES, self);
+    }
+    
     StickerView *nextTarget = nil;
     const NSInteger index = [self.superview.subviews indexOfObject:self];
     
-    for(NSInteger i=index+1; i<self.superview.subviews.count; ++i)
+    for(NSInteger i = index+1; i < self.superview.subviews.count; ++i)
     {
         UIView *view = [self.superview.subviews objectAtIndex:i];
         if([view isKindOfClass:[StickerView class]])
@@ -106,7 +183,7 @@
     
     if(!nextTarget)
     {
-        for(NSInteger i=index-1; i>=0; --i)
+        for(NSInteger i = index-1; i >= 0; --i)
         {
             UIView *view = [self.superview.subviews objectAtIndex:i];
             if([view isKindOfClass:[StickerView class]])
@@ -157,6 +234,16 @@
 
 - (void)viewDidTap:(UITapGestureRecognizer*)sender
 {
+    GIFImageView *gifView = (GIFImageView *)sender.view;
+    if (gifView.isGIFPlaying)
+    {
+        [gifView stopGIF];
+    }
+    else
+    {
+        [gifView startGIF];
+    }
+    
     [[self class] setActiveStickerView:self];
 }
 

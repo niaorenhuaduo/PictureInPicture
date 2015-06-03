@@ -43,7 +43,13 @@
 {
     for (GIFImageView *imageView in _gifViewHashTable)
     {
-        [imageView performSelector:@selector(play)];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundeclared-selector"
+        if ([imageView respondsToSelector:@selector(playGIF)])
+        {
+            [imageView performSelector:@selector(playGIF) withObject:nil];
+        }
+#pragma clang diagnostic pop
     }
 }
 
@@ -141,7 +147,7 @@
     [[GIFManager shared] stopGIFView:self];
 }
 
-- (void)play
+- (void)playGIF
 {
     float nextFrameDuration = [self frameDurationAtIndex:MIN(_index+1, _frameCount-1)];
     if (_timestamp < nextFrameDuration)
