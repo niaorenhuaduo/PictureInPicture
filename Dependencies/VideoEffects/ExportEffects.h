@@ -1,36 +1,27 @@
+//
+//  ExportEffects
+//  PictureInPicture
+//
+//  Created by Johnny Xu on 5/30/15.
+//  Copyright (c) 2015 Future Studio. All rights reserved.
+//
 
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
-#import <TargetConditionals.h>
 
-typedef NSString *(^SRScreenRecorderOutputFilenameBlock)();
-
-typedef UIImage *(^SRCaptureViewBlock)();
-typedef void (^SRFinishRecordingBlock)(BOOL success, id result);
-typedef CMTime (^SRCaptureVideoSampleTime)();
+typedef void (^SRFinishVideoBlock)(BOOL success, id result);
 typedef void (^SRExportProgressBlock)(NSNumber *percentage);
 
-@interface SRScreenRecorder : NSObject
+@interface ExportEffects : NSObject
 
-@property(nonatomic, copy) NSNumber *audioSampleRate;
-@property(nonatomic, copy) NSNumber *numberOfAudioChannels;
-@property(nonatomic, copy) NSString *audioOutPath;
-
-@property (assign, nonatomic) NSInteger frameInterval;
-@property (assign, nonatomic) NSUInteger autosaveDuration; // in second, default value is 600 (10 minutes).
-
-@property (copy, nonatomic) SRScreenRecorderOutputFilenameBlock filenameBlock;
-
-@property (copy, nonatomic) SRFinishRecordingBlock finishRecordingBlock;
-@property (copy, nonatomic) SRCaptureViewBlock captureViewBlock;
-@property (copy, nonatomic) SRCaptureVideoSampleTime captureVideoSampleTimeBlock;
+@property (copy, nonatomic) SRFinishVideoBlock finishVideoBlock;
 @property (copy, nonatomic) SRExportProgressBlock exportProgressBlock;
 
 
-+ (SRScreenRecorder *)sharedInstance;
++ (ExportEffects *)sharedInstance;
 
-- (void)addEffectToVideo;
-
+- (void)initGifArray:(NSMutableArray *)gifs withVideoArray:(NSMutableArray *)videos;
+- (void)addEffectToVideo:(NSString *)videoFilePath;
 - (void)writeExportedVideoToAssetsLibrary:(NSString *)outputPath;
 
 @end

@@ -1,50 +1,51 @@
+//
+//  ExportEffects
+//  PictureInPicture
+//
+//  Created by Johnny Xu on 5/30/15.
+//  Copyright (c) 2015 Future Studio. All rights reserved.
+//
 
 #import <AVFoundation/AVFoundation.h>
 #import <QuartzCore/QuartzCore.h>
 #import <AssetsLibrary/AssetsLibrary.h>
-#import "SRScreenRecorder.h"
-#import "PBJVideoView.h"
+#import "ExportEffects.h"
 #import "GifAnimationLayer.h"
 #import "VideoAnimationLayer.h"
+#import "StickerView.h"
+#import "VideoView.h"
 
-#define DEFAULT_FRAME_INTERVAL 6  // 60/DEFAULT_FRAME_INTERVAL frames/sec
-#define DEFAULT_AUTOSAVE_DURATION 60
-#define TIME_SCALE 60
-
-#define DefaultOutputVideoName @"outputMovie.mov"
+#define DefaultOutputVideoName @"outputMovie.mp4"
 #define DefaultOutputAudioName @"outputAudio.caf"
 
-static NSInteger counter;
+@interface ExportEffects ()
+{
+}
 
-@interface SRScreenRecorder ()
-
-@property (strong, nonatomic) AVAssetWriter *writer;
-@property (strong, nonatomic) AVAssetWriterInput *writerInput;
-@property (strong, nonatomic) AVAssetWriterInputPixelBufferAdaptor *writerInputPixelBufferAdaptor;
-@property (strong, nonatomic) CADisplayLink *displayLink;
-
+@property(nonatomic, copy) NSNumber *audioSampleRate;
+@property(nonatomic, copy) NSNumber *numberOfAudioChannels;
+@property(nonatomic, copy) NSString *audioOutPath;
 @property (strong, nonatomic) AVAudioRecorder *audioRecorder;
 
 @property (strong, nonatomic) NSTimer *timerEffect;
 @property (strong, nonatomic) AVAssetExportSession *exportSession;
 
+@property (strong, nonatomic) NSMutableArray *gifArray;
+@property (strong, nonatomic) NSMutableArray *videoArray;
+
 @end
 
-@implementation SRScreenRecorder
+@implementation ExportEffects
 {
-	CFAbsoluteTime firstFrameTime;
-    CFTimeInterval startTimestamp;
-    
-    dispatch_queue_t queue;
-    UIBackgroundTaskIdentifier backgroundTask;
+
 }
 
-+ (SRScreenRecorder *)sharedInstance
++ (ExportEffects *)sharedInstance
 {
-    static SRScreenRecorder *sharedInstance = nil;
+    static ExportEffects *sharedInstance = nil;
     static dispatch_once_t pred;
     dispatch_once(&pred, ^{
-        sharedInstance = [[SRScreenRecorder alloc] init];
+        sharedInstance = [[ExportEffects alloc] init];
     });
     
     return sharedInstance;
@@ -56,18 +57,12 @@ static NSInteger counter;
     
     if (self)
     {
-        _frameInterval = DEFAULT_FRAME_INTERVAL;
-        _autosaveDuration = DEFAULT_AUTOSAVE_DURATION;
-        
         _audioOutPath = nil;
         _timerEffect = nil;
         _exportSession = nil;
         
-        counter++;
-        NSString *label = [NSString stringWithFormat:@"recorder-%ld", (long)counter];
-        queue = dispatch_queue_create([label cStringUsingEncoding:NSUTF8StringEncoding], NULL);
-        
-        [self setupNotifications];
+        _gifArray = nil;
+        _videoArray = nil;
     }
     return self;
 }
@@ -76,19 +71,9 @@ static NSInteger counter;
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     
-    _writer = nil;
-    _writerInput = nil;
-    _writerInputPixelBufferAdaptor = nil;
-    
     if (_exportSession)
     {
         _exportSession = nil;
-    }
-    
-    if (_displayLink)
-    {
-        [_displayLink invalidate];
-        _displayLink = nil;
     }
     
     if (_timerEffect)
@@ -98,236 +83,48 @@ static NSInteger counter;
     }
 }
 
-#pragma mark Setup
-
-- (void)setupAssetWriterWithURL:(NSURL *)outputURL
+- (void)initGifArray:(NSMutableArray *)gifs withVideoArray:(NSMutableArray *)videos
 {
-    NSError *error = nil;
-    
-    self.writer = [[AVAssetWriter alloc] initWithURL:outputURL fileType:AVFileTypeQuickTimeMovie error:&error];
-    NSParameterAssert(self.writer);
-    if (error)
+    if (gifs && [gifs count] > 0)
     {
-        NSLog(@"Error: %@", [error localizedDescription]);
+        if (!_gifArray)
+        {
+            _gifArray = [NSMutableArray arrayWithCapacity:1];
+        }
+        else
+        {
+            [_gifArray removeAllObjects];
+        }
+        
+        _gifArray = [NSMutableArray arrayWithArray:gifs];
     }
     
-    UIScreen *mainScreen = [UIScreen mainScreen];
-    CGSize size = mainScreen.bounds.size;
-    
-    NSDictionary *outputSettings = @{AVVideoCodecKey : AVVideoCodecH264, AVVideoWidthKey : @(size.width), AVVideoHeightKey : @(size.height)};
-    self.writerInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeVideo outputSettings:outputSettings];
-	self.writerInput.expectsMediaDataInRealTime = YES;
-    
-    NSDictionary *sourcePixelBufferAttributes = @{(NSString *)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32ARGB)};
-    self.writerInputPixelBufferAdaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput:self.writerInput
-                                                                                                          sourcePixelBufferAttributes:sourcePixelBufferAttributes];
-    NSParameterAssert(self.writerInput);
-    NSParameterAssert([self.writer canAddInput:self.writerInput]);
-    
-    [self.writer addInput:self.writerInput];
-    
-	firstFrameTime = CFAbsoluteTimeGetCurrent();
-    
-    [self.writer startWriting];
-    [self.writer startSessionAtSourceTime:kCMTimeZero];
+    if (videos && [videos count] > 0)
+    {
+        if (!_videoArray)
+        {
+            _videoArray = [NSMutableArray arrayWithCapacity:1];
+        }
+        else
+        {
+            [_videoArray removeAllObjects];
+        }
+        
+        _videoArray = [NSMutableArray arrayWithArray:videos];
+    }
 }
 
+#pragma mark Setup
 - (void)setupNotifications
 {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidEnterBackground:) name:UIApplicationDidEnterBackgroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillEnterForeground:) name:UIApplicationWillEnterForegroundNotification object:nil];
 }
 
-- (void)setupTimer
-{
-    self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(captureFrame:)];
-    self.displayLink.frameInterval = self.frameInterval;
-    [self.displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-}
-
-#pragma mark Recording
-
-- (void)startRecording
-{
-    // Delete file
-    unlink([[self getOutputFilePath] UTF8String]);
-    
-    [self setupAssetWriterWithURL:[NSURL fileURLWithPath:[self getOutputFilePath]]];
-    
-    [self setupTimer];
-}
-
-- (void)stopRecording
-{
-    [self.displayLink invalidate];
-    startTimestamp = 0.0;
-    
-    dispatch_async(queue, ^
-                   {
-                       if (self.writer.status != AVAssetWriterStatusCompleted && self.writer.status != AVAssetWriterStatusUnknown)
-                       {
-                           [self.writerInput markAsFinished];
-                       }
-                       
-                       if ([self.writer respondsToSelector:@selector(finishWritingWithCompletionHandler:)])
-                       {
-                           [self.writer finishWritingWithCompletionHandler:^
-                            {
-                                [self finishBackgroundTask];
-                                
-                                if (_audioOutPath)
-                                {
-                                    [self addEffectToRecording];
-                                }
-                                else
-                                {
-                                    // Save video to Album
-                                    [self writeExportedVideoToAssetsLibrary:[self getOutputFilePath]];
-                                }
-                            }];
-                       }
-                    });
-}
-
-- (void)rotateFile
-{
-    dispatch_async(queue, ^
-                   {
-                       [self stopRecording];
-                   });
-}
-
-- (void)captureFrame:(CADisplayLink *)displayLink
-{
-    dispatch_async(queue, ^
-                   {
-                       if (self.writerInput.readyForMoreMediaData)
-                       {
-                           CVReturn status = kCVReturnSuccess;
-                           CVPixelBufferRef buffer = NULL;
-                           CFTypeRef backingData;
-                           
-                           __block UIImage *screenshot = nil;
-                           dispatch_sync(dispatch_get_main_queue(), ^{
-                               if (_captureViewBlock)
-                               {
-                                   screenshot = self.captureViewBlock();
-                               }
-                               else
-                               {
-                                   screenshot = [self screenshot];
-                               }
-                           });
-                           
-                           if (!screenshot)
-                           {
-                               return;
-                           }
-                           
-                           CGImageRef imageRef = screenshot.CGImage;
-                           
-                           CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
-                           CFDataRef data = CGDataProviderCopyData(dataProvider);
-                           backingData = CFDataCreateMutableCopy(kCFAllocatorDefault, CFDataGetLength(data), data);
-                           CFRelease(data);
-                           
-                           const UInt8 *bytePtr = CFDataGetBytePtr(backingData);
-                           status = CVPixelBufferCreateWithBytes(kCFAllocatorDefault,
-                                                                 CGImageGetWidth(imageRef),
-                                                                 CGImageGetHeight(imageRef),
-                                                                 kCVPixelFormatType_32BGRA,
-                                                                 (void *)bytePtr,
-                                                                 CGImageGetBytesPerRow(imageRef),
-                                                                 NULL,
-                                                                 NULL,
-                                                                 NULL,
-                                                                 &buffer);
-                           NSParameterAssert(status == kCVReturnSuccess && buffer);
-                
-                           
-                           if (buffer)
-                           {
-                               CFAbsoluteTime currentTime = CFAbsoluteTimeGetCurrent();
-                               CFTimeInterval elapsedTime = currentTime - firstFrameTime;
-                               CMTime presentTime =  CMTimeMake(elapsedTime * TIME_SCALE, TIME_SCALE);
-                               
-                               // Sample time setting
-                               if (_captureVideoSampleTimeBlock && !CMTIME_IS_INVALID(_captureVideoSampleTimeBlock()))
-                               {
-                                   presentTime = self.captureVideoSampleTimeBlock();
-                               }
-                               
-                               if(![self.writerInputPixelBufferAdaptor appendPixelBuffer:buffer withPresentationTime:presentTime])
-                               {
-                                   [self stopRecording];
-                               }
-                               
-                               CVPixelBufferRelease(buffer);
-                           }
-                           
-                           CFRelease(backingData);
-                       }
-                   });
-    
-    if (startTimestamp == 0.0)
-    {
-        startTimestamp = displayLink.timestamp;
-    }
-    
-//    NSTimeInterval dalta = displayLink.timestamp - startTimestamp;
-//    if (self.autosaveDuration > 0 && dalta > self.autosaveDuration)
-//    {
-//        startTimestamp = 0.0;
-//        [self rotateFile];
-//    }
-}
-
-- (UIImage *)screenshot
-{
-    UIScreen *mainScreen = [UIScreen mainScreen];
-    CGSize imageSize = mainScreen.bounds.size;
-    if (UIGraphicsBeginImageContextWithOptions)
-    {
-        UIGraphicsBeginImageContextWithOptions(imageSize, NO, 0);
-    }
-    else
-    {
-        UIGraphicsBeginImageContext(imageSize);
-    }
-    
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    
-    NSArray *windows = [[UIApplication sharedApplication] windows];
-    for (UIWindow *window in windows)
-    {
-        if (![window respondsToSelector:@selector(screen)] || window.screen == mainScreen)
-        {
-            CGContextSaveGState(context);
-            
-            CGContextTranslateCTM(context, window.center.x, window.center.y);
-            CGContextConcatCTM(context, [window transform]);
-            CGContextTranslateCTM(context,
-                                  -window.bounds.size.width * window.layer.anchorPoint.x,
-                                  -window.bounds.size.height * window.layer.anchorPoint.y);
-            
-            [window.layer.presentationLayer renderInContext:context];
-            
-            CGContextRestoreGState(context);
-        }
-    }
-    
-    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-    
-    UIGraphicsEndImageContext();
-    
-    return image;
-}
-
 #pragma mark Background tasks
-
 - (void)applicationDidEnterBackground:(NSNotification *)notification
 {
-    UIApplication *application = [UIApplication sharedApplication];
+//    UIApplication *application = [UIApplication sharedApplication];
     
     UIDevice *device = [UIDevice currentDevice];
     BOOL backgroundSupported = NO;
@@ -338,31 +135,15 @@ static NSInteger counter;
     
     if (backgroundSupported)
     {
-        backgroundTask = [application beginBackgroundTaskWithExpirationHandler:^{
-            [self finishBackgroundTask];
-        }];
     }
-    
-//    [self stopRecording];
 }
 
 - (void)applicationWillEnterForeground:(NSNotification *)notification
 {
-    [self finishBackgroundTask];
-//    [self startRecording];
-}
 
-- (void)finishBackgroundTask
-{
-    if (backgroundTask != UIBackgroundTaskInvalid)
-    {
-        [[UIApplication sharedApplication] endBackgroundTask:backgroundTask];
-        backgroundTask = UIBackgroundTaskInvalid;
-    }
 }
 
 #pragma mark Utility methods
-
 - (NSString *)documentDirectory
 {
 	NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
@@ -402,26 +183,6 @@ static NSInteger counter;
     return filename;
 }
 
-- (NSURL *)outputFileURL
-{    
-    if (!self.filenameBlock)
-    {
-        __block SRScreenRecorder *wself = self;
-        self.filenameBlock = ^(void) {
-            return [wself defaultFilename];
-        };
-    }
-    
-    NSString *filename = self.filenameBlock();
-    if ([self existsFile:filename])
-    {
-        filename = [self nextFilename:filename];
-    }
-    
-    NSString *path = [self.documentDirectory stringByAppendingPathComponent:filename];
-    return [NSURL fileURLWithPath:path];
-}
-
 - (NSString*)getOutputFilePath
 {
     NSString* mp4OutputFile = [NSTemporaryDirectory() stringByAppendingPathComponent:DefaultOutputVideoName];
@@ -434,6 +195,15 @@ static NSInteger counter;
     //
     //    NSString *fileName = [[path stringByAppendingPathComponent:nowTimeStr] stringByAppendingString:@".mp4"];
     //    return fileName;
+}
+
+#pragma mark - Export Progress Callback
+- (void)retrievingExportProgress
+{
+    if (_exportSession && _exportProgressBlock)
+    {
+        self.exportProgressBlock([NSNumber numberWithFloat:_exportSession.progress]);
+    }
 }
 
 #pragma mark - Export Video
@@ -458,9 +228,9 @@ static NSInteger counter;
              
              NSLog(@"%@", message);
              
-             if (weakSelf.finishRecordingBlock)
+             if (weakSelf.finishVideoBlock)
              {
-                 weakSelf.finishRecordingBlock(YES, message);
+                 weakSelf.finishVideoBlock(YES, message);
              }
          }];
     }
@@ -469,9 +239,9 @@ static NSInteger counter;
         NSString *message = GBLocalizedString(@"MsgFailed");;
         NSLog(@"%@", message);
         
-        if (_finishRecordingBlock)
+        if (_finishVideoBlock)
         {
-            _finishRecordingBlock(NO, message);
+            _finishVideoBlock(NO, message);
         }
     }
     
@@ -493,7 +263,7 @@ static NSInteger counter;
     
     if (sessionError)
     {
-        self.finishRecordingBlock(NO, sessionError.description);
+        self.finishVideoBlock(NO, sessionError.description);
         return;
     }
     
@@ -515,7 +285,7 @@ static NSInteger counter;
     if (error)
     {
         // Let the delegate know that shit has happened.
-        self.finishRecordingBlock(NO, error.description);;
+        self.finishVideoBlock(NO, error.description);;
         _audioRecorder = nil;
         
         return;
@@ -534,43 +304,35 @@ static NSInteger counter;
     _audioRecorder = nil;
 }
 
-- (void)addEffectToVideo
+- (void)addEffectToVideo:(NSString *)videoFilePath
 {
+    if (isStringEmpty(videoFilePath))
+    {
+        NSLog(@"videoFilePath is empty!");
+        
+        if (self.finishVideoBlock)
+        {
+            self.finishVideoBlock(NO, GBLocalizedString(@"MsgConvertFailed"));
+        }
+        
+        return;
+    }
+    
     double degrees = 0.0;
     NSUserDefaults *prefs = [NSUserDefaults standardUserDefaults];
     if ([prefs objectForKey:@"vidorientation"])
         degrees = [[prefs objectForKey:@"vidorientation"] doubleValue];
     
-    NSString *videoPath = [self getOutputFilePath];
-    NSString *audioPath = self.audioOutPath;
+    NSString *videoPath = videoFilePath;
+    NSURL *videoURL = getFileURL(videoFilePath); //[NSURL fileURLWithPath:videoPath];
     
-    NSURL *videoURL = [NSURL fileURLWithPath:videoPath];
-    
-    NSString *fileName = [audioPath stringByDeletingPathExtension];
-    NSLog(@"%@",fileName);
-    NSString *fileExt = [audioPath pathExtension];
-    NSLog(@"%@",fileExt);
-    NSURL *audioURL = [[NSBundle mainBundle] URLForResource:fileName withExtension:fileExt];
-    
-    AVURLAsset *videoAsset = [[AVURLAsset alloc] initWithURL:videoURL options:nil];
-    AVURLAsset *audioAsset = [[AVURLAsset alloc] initWithURL:audioURL options:nil];
+//    AVURLAsset *videoAsset = [[AVURLAsset alloc] initWithURL:videoURL options:nil];
+    AVAsset *videoAsset = [AVAsset assetWithURL:videoURL];
     
     AVAssetTrack *assetVideoTrack = nil;
-    AVAssetTrack *assetAudioTrack = nil;
-    
-    if ([[NSFileManager defaultManager] fileExistsAtPath:videoPath])
-    {
-        NSArray *assetArray = [videoAsset tracksWithMediaType:AVMediaTypeVideo];
-        if ([assetArray count] > 0)
-            assetVideoTrack = assetArray[0];
-    }
-    
-//    if ([[NSFileManager defaultManager] fileExistsAtPath:audioPath])
-    {
-        NSArray *assetArray = [audioAsset tracksWithMediaType:AVMediaTypeAudio];
-        if ([assetArray count] > 0)
-            assetAudioTrack = assetArray[0];
-    }
+    NSArray *assetArray = [videoAsset tracksWithMediaType:AVMediaTypeVideo];
+    if ([assetArray count] > 0)
+        assetVideoTrack = assetArray[0];
     
     CGSize videoSize = CGSizeZero;
     AVMutableComposition *mixComposition = [AVMutableComposition composition];
@@ -580,50 +342,80 @@ static NSInteger counter;
         
         AVMutableCompositionTrack *compositionVideoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
         [compositionVideoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:assetVideoTrack atTime:kCMTimeZero error:nil];
-        
-//        if (assetAudioTrack)
-//            [compositionVideoTrack scaleTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) toDuration:audioAsset.duration];
         [compositionVideoTrack setPreferredTransform:CGAffineTransformMakeRotation(degreesToRadians(degrees))];
     }
     
     NSLog(@"videoSize width: %f, Height: %f", videoSize.width, videoSize.height);
     if (videoSize.height == 0 || videoSize.width == 0)
     {
+        if (self.finishVideoBlock)
+        {
+            self.finishVideoBlock(NO, GBLocalizedString(@"MsgConvertFailed"));
+        }
+        
         return;
     }
     
-    if (assetAudioTrack)
+    AVMutableCompositionTrack *audioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+    if ([[videoAsset tracksWithMediaType:AVMediaTypeAudio] count] > 0)
     {
-        AVMutableCompositionTrack *compositionAudioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
-        [compositionAudioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:assetAudioTrack atTime:kCMTimeZero error:nil];
+        AVAssetTrack *assetAudioTrack = [[videoAsset tracksWithMediaType:AVMediaTypeAudio] objectAtIndex:0];
+        [audioTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:assetAudioTrack atTime:kCMTimeZero error:nil];
+    }
+    else
+    {
+        NSLog(@"Reminder: video hasn't audio!");
     }
     
     // 4. Effects
     CALayer *parentLayer = [CALayer layer];
     CALayer *videoLayer = [CALayer layer];
-    parentLayer.frame = CGRectMake(0, 0, videoSize.width, videoSize.height);
-    videoLayer.frame = parentLayer.frame;
+    parentLayer.bounds = CGRectMake(0, 0, videoSize.width, videoSize.height);
+    parentLayer.anchorPoint = CGPointMake(0, 0);
+    parentLayer.position = CGPointMake(0, 0);
+    
+    videoLayer.bounds = parentLayer.bounds;
+    videoLayer.anchorPoint =  CGPointMake(0.5, 0.5);
+    videoLayer.position = CGPointMake(CGRectGetMidX(parentLayer.bounds), CGRectGetMidY(parentLayer.bounds));
+    
+    parentLayer.geometryFlipped = YES;
+//    CGFloat screenScale = [UIScreen mainScreen].scale;
+//    parentLayer.sublayerTransform = CATransform3DMakeScale(screenScale, screenScale, 1);
     [parentLayer addSublayer:videoLayer];
     
     // Animation effects
-    NSMutableArray *animatedLayers = [[NSMutableArray alloc] initWithCapacity:2];
+    NSMutableArray *animatedLayers = [[NSMutableArray alloc] init];
     CALayer *animatedLayer = nil;
-    // 1.
-    NSString *demoGifPath = getFilePath(@"1.gif");
-    CGRect frame = CGRectMake(0, 150, 100, 100);
-    animatedLayer = [GifAnimationLayer layerWithGifFilePath:demoGifPath withFrame:frame];
-    if (animatedLayer && [animatedLayer isKindOfClass:[GifAnimationLayer class]])
+    
+    // 1. Gifs
+    if (_gifArray && [_gifArray count] > 0)
     {
-        [animatedLayers addObject:(id)animatedLayer];
+        for (StickerView *view in _gifArray)
+        {
+            NSString *gifPath = view.getFilePath;
+            CGRect frame = view.getInnerFrame;
+            animatedLayer = [GifAnimationLayer layerWithGifFilePath:gifPath withFrame:frame];
+            if (animatedLayer && [animatedLayer isKindOfClass:[GifAnimationLayer class]])
+            {
+                [animatedLayers addObject:(id)animatedLayer];
+            }
+        }
     }
     
-    // 2.
-    NSString *demoVideoPath = getFilePath(@"IMG_Dst.mov");
-    frame = CGRectMake(100, 300, 100, 100);
-    animatedLayer = [VideoAnimationLayer layerWithVideoFilePath:demoVideoPath withFrame:frame];
-    if (animatedLayer && [animatedLayer isKindOfClass:[VideoAnimationLayer class]])
+    
+    // 2. Videos
+    if (_videoArray && [_videoArray count] > 0)
     {
-        [animatedLayers addObject:(id)animatedLayer];
+        for (VideoView *view in _videoArray)
+        {
+            NSString *videoPath = view.getFilePath;
+            CGRect frame = view.getInnerFrame;
+            animatedLayer = [VideoAnimationLayer layerWithVideoFilePath:videoPath withFrame:frame];
+            if (animatedLayer && [animatedLayer isKindOfClass:[VideoAnimationLayer class]])
+            {
+                [animatedLayers addObject:(id)animatedLayer];
+            }
+        }
     }
     
     if (animatedLayers && [animatedLayers count] > 0)
@@ -634,35 +426,63 @@ static NSInteger counter;
         }
     }
     
-    // Make a "pass through video track" video composition.
-    AVMutableVideoCompositionInstruction *passThroughInstruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
-    passThroughInstruction.timeRange = CMTimeRangeMake(kCMTimeZero, [videoAsset duration]);
+    // Video composition.
+    AVMutableVideoCompositionInstruction *mainInstruciton = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+    mainInstruciton.timeRange = CMTimeRangeMake(kCMTimeZero, [videoAsset duration]);
     
-    AVMutableVideoCompositionLayerInstruction *passThroughLayer = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:assetVideoTrack];
-    passThroughInstruction.layerInstructions = [NSArray arrayWithObject:passThroughLayer];
+    // Fix orientation issue
+    AVMutableVideoCompositionLayerInstruction *layerInstruciton = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:assetVideoTrack];
     
-    AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
-    videoComposition.instructions = [NSArray arrayWithObject:passThroughInstruction];
-    videoComposition.animationTool = [AVVideoCompositionCoreAnimationTool videoCompositionCoreAnimationToolWithPostProcessingAsVideoLayer:videoLayer inLayer:parentLayer];
-    videoComposition.frameDuration = CMTimeMake(1, 60); // 60 fps
-    videoComposition.renderSize =  videoSize;
-
+    CGFloat rate;
+    CGFloat renderW = MIN(videoSize.width, videoSize.height);
+    rate = renderW / MIN(assetVideoTrack.naturalSize.width, assetVideoTrack.naturalSize.height);
+    CGAffineTransform layerTransform = CGAffineTransformMake(assetVideoTrack.preferredTransform.a, assetVideoTrack.preferredTransform.b, assetVideoTrack.preferredTransform.c, assetVideoTrack.preferredTransform.d, assetVideoTrack.preferredTransform.tx * rate, assetVideoTrack.preferredTransform.ty * rate);
+    layerTransform = CGAffineTransformConcat(layerTransform, CGAffineTransformMake(1, 0, 0, 1, 0, -(assetVideoTrack.naturalSize.width - assetVideoTrack.naturalSize.height) / 2.0));
+    layerTransform = CGAffineTransformScale(layerTransform, rate, rate);
+    [layerInstruciton setTransform:layerTransform atTime:kCMTimeZero];
+    [layerInstruciton setOpacity:0.0 atTime:[videoAsset duration]];
     
-    NSString *exportPath = [videoPath substringWithRange:NSMakeRange(0, videoPath.length - 4)];
-    exportPath = [NSString stringWithFormat:@"%@.mp4", exportPath];
-    NSURL *exportURL = [NSURL fileURLWithPath:exportPath];
+    mainInstruciton.layerInstructions = [NSArray arrayWithObject:layerInstruciton];
+    
+    AVMutableVideoComposition *mainComposition = [AVMutableVideoComposition videoComposition];
+    mainComposition.instructions = [NSArray arrayWithObject:mainInstruciton]; //@[mainInstruciton];
+    mainComposition.animationTool = [AVVideoCompositionCoreAnimationTool videoCompositionCoreAnimationToolWithPostProcessingAsVideoLayer:videoLayer inLayer:parentLayer];
+    mainComposition.frameDuration = CMTimeMake(1, 30);
+    mainComposition.renderSize = videoSize;
+    
+    // Make a video composition.
+//    AVMutableVideoCompositionInstruction *passThroughInstruction = [AVMutableVideoCompositionInstruction videoCompositionInstruction];
+//    passThroughInstruction.timeRange = CMTimeRangeMake(kCMTimeZero, [videoAsset duration]);
+//    
+//    AVMutableVideoCompositionLayerInstruction *passThroughLayer = [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:assetVideoTrack];
+//    passThroughInstruction.layerInstructions = [NSArray arrayWithObject:passThroughLayer];
+//    
+//    AVMutableVideoComposition *videoComposition = [AVMutableVideoComposition videoComposition];
+//    videoComposition.instructions = [NSArray arrayWithObject:passThroughInstruction];
+//    videoComposition.animationTool = [AVVideoCompositionCoreAnimationTool videoCompositionCoreAnimationToolWithPostProcessingAsVideoLayer:videoLayer inLayer:parentLayer];
+//    videoComposition.frameDuration = CMTimeMake(1, 30); // 30 fps
+//    videoComposition.renderSize =  videoSize;
+    
+    NSString *exportPath = [self getOutputFilePath];
+    NSURL *exportURL = [NSURL fileURLWithPath:[self returnFormatString:exportPath]];
     
     // Delete old file
     unlink([exportPath UTF8String]);
+    
+    if (animatedLayers)
+    {
+        [animatedLayers removeAllObjects];
+        animatedLayers = nil;
+    }
     
     _exportSession = [[AVAssetExportSession alloc] initWithAsset:mixComposition presetName:AVAssetExportPresetHighestQuality];
     [_exportSession setOutputFileType:[[[UIDevice currentDevice] systemVersion] floatValue] >= 6.0 ? AVFileTypeMPEG4 : AVFileTypeQuickTimeMovie];
     [_exportSession setOutputURL:exportURL];
     [_exportSession setShouldOptimizeForNetworkUse:YES];
     
-    if (videoComposition)
+    if (mainComposition)
     {
-        _exportSession.videoComposition = videoComposition;
+        _exportSession.videoComposition = mainComposition;
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -700,7 +520,10 @@ static NSInteger counter;
                 [blockSelf.timerEffect invalidate];
                 blockSelf.timerEffect = nil;
 
-                self.finishRecordingBlock(NO, GBLocalizedString(@"MsgConvertFailed"));
+                if (self.finishVideoBlock)
+                {
+                    self.finishVideoBlock(NO, GBLocalizedString(@"MsgConvertFailed"));
+                }
                 
                 NSLog(@"Export failed: %@, %@", [[blockSelf.exportSession error] localizedDescription], [blockSelf.exportSession error]);
                 break;
@@ -717,13 +540,10 @@ static NSInteger counter;
     }];
 }
 
-// Export progress callback
-- (void)retrievingExportProgress
+// Convert 'space' char
+- (NSString *)returnFormatString:(NSString *)str
 {
-    if (_exportSession && _exportProgressBlock)
-    {
-        self.exportProgressBlock([NSNumber numberWithFloat:_exportSession.progress]);
-    }
+    return [str stringByReplacingOccurrencesOfString:@" " withString:@""];
 }
 
 @end
