@@ -1,6 +1,6 @@
 //
-//  VideoReflection-Prefix.pch
-//  VideoReflection
+//  PictureInPicture-Prefix.pch
+//  PictureInPicture
 //
 //  Created by Johnny Xu on 5/22/15.
 //  Copyright (c) 2015 Future Studio. All rights reserved.
@@ -17,7 +17,6 @@
 #import <Foundation/Foundation.h>
 
 // Custom
-#import "SNLoading.h"
 #import "CommonDefine.h"
 
 #endif

@@ -2,7 +2,7 @@
 //  AppDelegate.h
 //  PictureInPicture
 //
-//  Created by Johnny on 5/30/15.
+//  Created by Johnny Xu on 5/30/15.
 //  Copyright (c) 2015 Future Studio. All rights reserved.
 //
 

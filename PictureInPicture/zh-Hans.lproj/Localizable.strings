@@ -27,9 +27,12 @@
 "Audio" = "音频";
 "BackgroundMusic" = "背景音乐";
 
-"SelectVideo" = "选择视频";
+"SelectVideo" = "选择背景视频";
 "SelectAudio" = "选择音频";
 "ExportResult" = "导出结果";
+
+"SelectGifOrVideo" = "选择嵌入的Gif或视频";
+"Gif" = "Gif";
 
 "Ready" = "已就绪";
 "NoReady" = "未就绪";
@@ -50,7 +53,7 @@
 "BeautyTime" = "美好时光";
 "PhotoBeautify" = "美图MV";
 
-"VideoReflection" = "形影不离";
+"PicInPic" = "画中画";
 "Demo" = "样例";
 "Convert" = "转换";
 
@@ -60,7 +63,7 @@
 "Seconds" = "秒";
 "SavingVideo" = "正在保存...";
 "VideoExportFailed" = "视频不能被导出.";
-"VideoIsEmptyHint" = "视频文件为空, 请先选择一个视频.";
+"VideoIsEmptyHint" = "背景视频文件为空, 请先选择一个背景视频.";
 
 "Finish" = "完成";
 "Skip" = "跳过";

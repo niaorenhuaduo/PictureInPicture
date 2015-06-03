@@ -346,17 +346,7 @@
     exporter.videoComposition = mainCompositionInst;
     exporter.outputURL = mergeFileURL;
     exporter.outputFileType = AVFileTypeQuickTimeMovie;
-    exporter.shouldOptimizeForNetworkUse = YES;
-    
-    // Fix iOS 5.x crash issue by Johnny Xu.
-    if (iOS5)
-    {
-        exporter.outputFileType = AVFileTypeQuickTimeMovie;
-    }
-    else
-    {
-        exporter.outputFileType = AVFileTypeMPEG4;
-    }
+    exporter.shouldOptimizeForNetworkUse = NO;
     
     [exporter exportAsynchronouslyWithCompletionHandler:^{
         // Fix can't export issue under iOS 5.x by Johnny Xu.

@@ -47,7 +47,6 @@
     layer.borderWidth = 2.0;
     layer.borderColor = kLightBlue.CGColor;
     layer.masksToBounds = YES;
-//    layer.backgroundColor = [UIColor whiteColor].CGColor;
     layer.videoFilePath = filePath;
     
     return layer;
@@ -154,7 +153,7 @@
         UIImage *thumbnail = imageFromSampleBuffer(sampleBuffer);
         if (thumbnail)
         {
-            [_imageVideoFrames addObject:(id)[thumbnail CGImage]];
+            [_imageVideoFrames addObject:(id)[imageFixOrientation(thumbnail) CGImage]];
         }
     }
     
